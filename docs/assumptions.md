@@ -3,6 +3,7 @@
 ## Input data assumptions
 
 - Each row describes one alert interval for one region.
+- Lines beginning with `#` are skipped as comments, so a dataset can carry a provenance banner. The bundled `data/sample_alerts.csv` is synthetic and marked this way on its first line; the loader assumes real alert CSVs do not contain `#` within data fields.
 - `started_at` and `ended_at` are parseable datetimes.
 - Timezone-aware timestamps are preferred. Naive timestamps are interpreted by pandas and should be avoided in production.
 - Raw event timestamps are stored in UTC, but hour-of-day and weekday in all analysis and CLI output are expressed in Europe/Kyiv local time (`DISPLAY_TZ`). Local labels follow the system time-zone database including any daylight-saving transitions, so the spring-forward night skips a local hour and the autumn night repeats one.

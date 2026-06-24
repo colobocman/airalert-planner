@@ -20,7 +20,9 @@ def load_alert_events(path: str | Path) -> LoadResult:
     Invalid rows are returned separately instead of silently disappearing.
     Rows with missing ended_at are marked invalid for interval-based analysis.
     """
-    df = pd.read_csv(path)
+    # '#' lines are skipped so a dataset can carry a provenance banner (the
+    # bundled sample is marked synthetic this way). Alert CSVs never contain '#'.
+    df = pd.read_csv(path, comment="#")
     missing = REQUIRED_COLUMNS - set(df.columns)
     if missing:
         raise ValueError(f"Missing required columns: {sorted(missing)}")
