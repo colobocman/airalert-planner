@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 from sklearn.metrics import brier_score_loss, mean_absolute_error
+from sklearn.model_selection import TimeSeriesSplit
 
 # Pseudo-observations pulling a thinly-supported cell toward its parent
 # estimate. A cell needs roughly this many real observations before it
@@ -105,22 +106,8 @@ def risk_table(model: RiskModel, regions: list[str]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def chronological_validation(panel: pd.DataFrame, split_ratio: float = 0.8) -> dict[str, float]:
-    """Validate using earlier hours for training and later hours for evaluation."""
-    if panel.empty or len(panel) < 4:
-        return {
-            "mae": 0.0,
-            "brier": 0.0,
-            "baseline_mae": 0.0,
-            "baseline_brier": 0.0,
-            "train_rows": float(len(panel)),
-            "test_rows": 0.0,
-        }
-
-    ordered = panel.sort_values("timestamp_hour")
-    split_idx = max(1, min(len(ordered) - 1, int(len(ordered) * split_ratio)))
-    train = ordered.iloc[:split_idx]
-    test = ordered.iloc[split_idx:]
+def _score_fold(train: pd.DataFrame, test: pd.DataFrame) -> dict[str, float]:
+    """Fit on the train slice and score the model and base-rate baseline on test."""
     model = fit_risk_model(train)
     preds = [model.predict_one(row.region, int(row.weekday), int(row.hour)) for row in test.itertuples(index=False)]
     y = test["alert_active"].astype(float).to_list()
@@ -136,4 +123,72 @@ def chronological_validation(panel: pd.DataFrame, split_ratio: float = 0.8) -> d
         "baseline_brier": float(brier_score_loss(y, baseline)),
         "train_rows": float(len(train)),
         "test_rows": float(len(test)),
+    }
+
+
+def _rolling_folds(ordered: pd.DataFrame, n_splits: int):
+    """Yield (train, test) frames split on whole timestamps (rolling origin).
+
+    Splitting on distinct ``timestamp_hour`` values -- not row indices -- keeps
+    every row sharing a timestamp on the same side of the cut. Otherwise a
+    boundary that falls inside a group of same-hour rows from different regions
+    would let one region's contemporaneous observation leak into another
+    region's prediction through the shared global-hour estimate.
+    """
+    unique_ts = ordered["timestamp_hour"].drop_duplicates().sort_values().reset_index(drop=True)
+    for train_idx, test_idx in TimeSeriesSplit(n_splits=n_splits).split(unique_ts):
+        train_ts = set(unique_ts.iloc[train_idx])
+        test_ts = set(unique_ts.iloc[test_idx])
+        yield (
+            ordered[ordered["timestamp_hour"].isin(train_ts)],
+            ordered[ordered["timestamp_hour"].isin(test_ts)],
+        )
+
+
+def chronological_validation(panel: pd.DataFrame, n_splits: int = 4) -> dict[str, object]:
+    """Rolling-origin validation: expanding-window folds, earlier hours train, later hours test.
+
+    A single 80/20 cut makes the metric hostage to one split point. Several
+    expanding-window folds (rolling origin) average that out and never let a
+    test row inform its own training data.
+    """
+    insufficient = {
+        "mae": 0.0,
+        "brier": 0.0,
+        "baseline_mae": 0.0,
+        "baseline_brier": 0.0,
+        "brier_lift": 0.0,
+        "n_splits": 0,
+        "train_rows": float(len(panel)),
+        "test_rows": 0.0,
+        "folds": [],
+    }
+    if panel.empty:
+        return insufficient
+
+    ordered = panel.sort_values("timestamp_hour").reset_index(drop=True)
+    # Fold on distinct timestamps; TimeSeriesSplit needs at least two folds.
+    splits = min(n_splits, ordered["timestamp_hour"].nunique() - 1)
+    if splits < 2:
+        return insufficient
+
+    folds = [_score_fold(train, test) for train, test in _rolling_folds(ordered, splits)]
+
+    def _mean(key: str) -> float:
+        return sum(fold[key] for fold in folds) / len(folds)
+
+    brier = _mean("brier")
+    baseline_brier = _mean("baseline_brier")
+    return {
+        "mae": _mean("mae"),
+        "brier": brier,
+        "baseline_mae": _mean("baseline_mae"),
+        "baseline_brier": baseline_brier,
+        # Positive lift = model beats the constant base-rate predictor's Brier.
+        "brier_lift": baseline_brier - brier,
+        "n_splits": len(folds),
+        # Largest expanding window trained / total out-of-sample rows scored.
+        "train_rows": folds[-1]["train_rows"],
+        "test_rows": float(sum(fold["test_rows"] for fold in folds)),
+        "folds": folds,
     }

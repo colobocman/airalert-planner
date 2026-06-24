@@ -1,7 +1,12 @@
 import pandas as pd
 import pytest
 
-from airalert_planner.risk import chronological_validation, fit_risk_model, risk_table
+from airalert_planner.risk import (
+    _rolling_folds,
+    chronological_validation,
+    fit_risk_model,
+    risk_table,
+)
 
 
 def _kyiv_hour18_panel() -> pd.DataFrame:
@@ -73,6 +78,115 @@ def test_support_one_reflects_only_the_exact_slot():
     # Support must be 0 (not the region+hour count) so the low-confidence guard
     # fires: the estimate for this slot is borrowed from broader history.
     assert model.support_one("Kyiv", 6, 18) == 0
+
+
+def _rolling_panel() -> pd.DataFrame:
+    """16 contiguous hourly rows in time order for rolling-origin validation."""
+    return pd.DataFrame(
+        [
+            {
+                "region": "Kyiv",
+                "timestamp_hour": pd.Timestamp("2026-06-01T00:00:00Z") + pd.Timedelta(hours=i),
+                "weekday": 0,
+                "hour": i % 24,
+                "alert_active": i % 2,
+            }
+            for i in range(16)
+        ]
+    )
+
+
+def _signal_panel() -> pd.DataFrame:
+    """Hour 6 always alerts, hour 18 never does, over 24 days, one region.
+
+    A stable, learnable signal so the frequency model beats the base rate and
+    brier_lift is meaningfully positive -- not a 0 == 0 identity that would pass
+    even if the lift sign were reversed.
+    """
+    base = pd.Timestamp("2026-06-01T00:00:00Z")
+    rows = []
+    for day in range(24):
+        for hour, active in ((6, 1), (18, 0)):
+            ts = base + pd.Timedelta(days=day, hours=hour)
+            rows.append(
+                {"region": "Kyiv", "timestamp_hour": ts, "weekday": ts.weekday(), "hour": hour, "alert_active": active}
+            )
+    return pd.DataFrame(rows)
+
+
+def _multi_region_panel() -> pd.DataFrame:
+    """Three regions sharing every timestamp -- exercises the interleaving path."""
+    base = pd.Timestamp("2026-06-01T00:00:00Z")
+    rows = []
+    for i in range(20):
+        ts = base + pd.Timedelta(hours=i)
+        for offset, region in enumerate(("Kyiv", "Lviv", "Kharkiv")):
+            rows.append(
+                {"region": region, "timestamp_hour": ts, "weekday": ts.weekday(), "hour": i % 24, "alert_active": (i + offset) % 2}
+            )
+    return pd.DataFrame(rows)
+
+
+def test_chronological_validation_uses_rolling_origin_folds():
+    metrics = chronological_validation(_rolling_panel())
+
+    # Rolling-origin validation evaluates several expanding-window folds, not a
+    # single 80/20 split, so the estimate is not hostage to one cut point.
+    assert metrics["n_splits"] >= 2
+    assert len(metrics["folds"]) == metrics["n_splits"]
+    assert all("brier" in fold for fold in metrics["folds"])
+
+
+def test_rolling_folds_split_on_whole_timestamps():
+    # Many regions share each timestamp. Folds must split on whole timestamps so
+    # no test hour can inform its own training data through the shared
+    # global-hour table -- and train must always precede test in time.
+    ordered = _multi_region_panel().sort_values("timestamp_hour").reset_index(drop=True)
+
+    folds = list(_rolling_folds(ordered, 3))
+
+    assert len(folds) == 3
+    for train, test in folds:
+        train_ts = set(train["timestamp_hour"])
+        test_ts = set(test["timestamp_hour"])
+        assert train_ts.isdisjoint(test_ts)
+        assert max(train_ts) < min(test_ts)
+
+
+def test_chronological_validation_reports_brier_lift():
+    metrics = chronological_validation(_signal_panel())
+
+    # Lift is the headline number: baseline Brier minus model Brier. The signal
+    # panel makes the model genuinely better, so a reversed sign would fail here.
+    assert metrics["brier_lift"] == pytest.approx(metrics["baseline_brier"] - metrics["brier"])
+    assert metrics["brier_lift"] > 0.0
+
+
+def test_chronological_validation_insufficient_below_two_splits():
+    # n_splits=1 cannot make a rolling-origin fold; return the sentinel instead
+    # of letting TimeSeriesSplit raise. The sentinel must carry the same keys as
+    # the success path so callers never hit a KeyError on brier_lift.
+    metrics = chronological_validation(_signal_panel(), n_splits=1)
+
+    assert metrics["n_splits"] == 0
+    assert metrics["test_rows"] == 0.0
+    assert metrics["brier_lift"] == 0.0
+    assert "folds" in metrics
+
+
+def test_chronological_validation_allows_three_timestamps():
+    panel = pd.DataFrame(
+        [
+            {"region": "Kyiv", "timestamp_hour": pd.Timestamp(f"2026-06-0{i}T10:00:00Z"), "weekday": 0, "hour": 10, "alert_active": i % 2}
+            for i in range(1, 4)
+        ]
+    )
+
+    # Three distinct timestamps support two expanding-window folds; the old
+    # len < 4 guard wrongly rejected this.
+    metrics = chronological_validation(panel)
+
+    assert metrics["n_splits"] == 2
 
 
 def test_chronological_validation_returns_metrics():
