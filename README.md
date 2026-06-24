@@ -58,7 +58,7 @@ python -m airalert_planner.cli risk \
 
 Hours are Europe/Kyiv local time, so `--from-hour 18` means 18:00 in Kyiv.
 
-The window average and every hour are labelled with an interpretation band — **Low** (below 0.10), **Medium** (0.10–0.30), or **High** (0.30 or higher) — and the output explains each band inline, so a trip, event, or shift can be timed against the historically quieter hours. The bands are planning heuristics over historical frequency, not safety predictions; the safety disclaimer is always printed.
+The window average and every hour are labelled with an interpretation band — **Low** (below 0.10), **Medium** (0.10–0.30), or **High** (0.30 or higher) — and the output explains each band inline, so a trip, event, or shift planner can compare windows against the historical pattern. The bands are planning heuristics over historical frequency, not safety predictions; the safety disclaimer is always printed.
 
 Compare a sequence of regions for a route-like plan:
 

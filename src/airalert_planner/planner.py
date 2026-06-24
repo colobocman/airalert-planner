@@ -23,7 +23,7 @@ _BAND_LEGEND = (
     "Risk bands (share of matching past hours that were under an alert):",
     "- Low (below 0.10): historically among the quieter windows for this region and time.",
     "- Medium (0.10 to 0.30): alerts in a moderate share of comparable past hours.",
-    "- High (0.30 or higher): historically among the busier windows; if timing is flexible, favour a lower-band hour.",
+    "- High (0.30 or higher): historically among the busier windows for this region and time.",
 )
 
 
@@ -58,8 +58,8 @@ class WindowRiskSummary:
         if flat:
             lines.append("No material difference in historical risk across this window.")
         else:
-            lowest = min(self.rows, key=lambda row: row["risk"])
-            highest = max(self.rows, key=lambda row: row["risk"])
+            lowest = next(row for row in self.rows if row["hour"] == self.lowest_risk_hour)
+            highest = next(row for row in self.rows if row["hour"] == self.highest_risk_hour)
             lines.append(
                 f"Relatively lower-risk hour: {lowest['hour']:02d}:00 ({lowest['risk']:.2f}, {risk_band(lowest['risk'])})"
             )
@@ -114,6 +114,9 @@ def summarize_trip(model: RiskModel, regions: list[str], date: str) -> str:
     lines = [f"Route-like regional risk sketch for {date}", ""]
     for region in regions:
         summary = summarize_window(model, region=region, date=date, from_hour=8, to_hour=22)
-        lines.append(f"- {region}: avg daytime risk={summary.average_risk:.2f}, lower around {summary.lowest_risk_hour:02d}:00")
+        lines.append(
+            f"- {region}: avg daytime risk={summary.average_risk:.2f} ({risk_band(summary.average_risk)}), "
+            f"lower around {summary.lowest_risk_hour:02d}:00"
+        )
     lines.extend(["", "This is region-sequence planning, not geospatial routing.", SAFETY_DISCLAIMER])
     return "\n".join(lines)

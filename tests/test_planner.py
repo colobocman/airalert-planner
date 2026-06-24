@@ -42,8 +42,9 @@ def test_summarize_window_explains_risk_bands():
 
     # A planner must be told what Low/Medium/High mean and where the cutoffs are.
     assert "risk bands" in lower
-    assert "low" in lower and "medium" in lower and "high" in lower
-    assert "0.10" in text and "0.30" in text
+    assert "Low (below 0.10" in text
+    assert "Medium (0.10 to 0.30" in text
+    assert "High (0.30 or higher" in text
 
 
 def test_summarize_window_labels_average_and_hours_with_bands():
@@ -121,3 +122,13 @@ def test_summarize_trip_handles_regions():
     assert "Kyiv" in text
     assert "Lviv" in text
     assert "not geospatial routing" in text
+
+
+def test_summarize_trip_labels_regions_with_bands():
+    # Empty model -> 0.0 risk everywhere -> the per-region average reads Low, so
+    # plan-trip is as interpretable as the single-window risk command.
+    model = fit_risk_model(pd.DataFrame(columns=["region", "timestamp_hour", "weekday", "hour", "alert_active"]))
+
+    text = summarize_trip(model, ["Kyiv"], "2026-06-26")
+
+    assert "(Low)" in text
