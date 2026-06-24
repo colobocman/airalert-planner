@@ -34,6 +34,23 @@ def test_load_alert_events_skips_comment_lines(tmp_path: Path):
     assert result.invalid_rows.empty
 
 
+def test_load_alert_events_inline_comment_does_not_silently_keep_row(tmp_path: Path):
+    path = tmp_path / "alerts.csv"
+    path.write_text(
+        "region,started_at,ended_at\n"
+        "Kyiv #capital,2026-06-01T01:00:00+03:00,2026-06-01T02:00:00+03:00\n"
+    )
+
+    result = load_alert_events(path)
+
+    # comment="#" strips from '#' to end of line anywhere, so an unquoted inline
+    # '#' corrupts the row. It must NOT slip through as a valid event; the
+    # invalid-row handling catches it. Real alert CSVs are assumed not to contain
+    # '#' in data fields (see docs/assumptions.md) -- quote the field if they do.
+    assert result.events.empty
+    assert len(result.invalid_rows) == 1
+
+
 def test_load_alert_events_separates_invalid_rows(tmp_path: Path):
     path = tmp_path / "alerts.csv"
     path.write_text("region,started_at,ended_at\nKyiv,2026-06-01T02:00:00+03:00,2026-06-01T01:00:00+03:00\n")

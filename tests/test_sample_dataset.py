@@ -35,6 +35,7 @@ def test_sample_dataset_has_sharp_day_night_contrast():
     model = _sample_model()
 
     for region in ("Kyiv", "Kharkiv"):
+        # weekday=4 is arbitrary: the generator's weights are day-of-week-uniform.
         midday = model.predict_one(region, 4, 12)
         night = model.predict_one(region, 4, 2)
         assert midday < 0.08
