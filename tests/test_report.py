@@ -52,6 +52,26 @@ def test_report_surfaces_rolling_origin_folds_and_lift(tmp_path: Path):
     assert "lift" in text.lower()
 
 
+def test_report_verdict_notes_fold_agreement(tmp_path: Path):
+    text = _write(
+        tmp_path,
+        {
+            "mae": 0.04, "brier": 0.050, "baseline_mae": 0.06, "baseline_brier": 0.063,
+            "brier_lift": 0.013, "n_splits": 4, "train_rows": 660.0, "test_rows": 165.0,
+            "folds": [
+                {"brier": 0.04, "baseline_brier": 0.06},
+                {"brier": 0.05, "baseline_brier": 0.06},
+                {"brier": 0.07, "baseline_brier": 0.06},
+                {"brier": 0.055, "baseline_brier": 0.063},
+            ],
+        },
+    )
+
+    # Averaged lift can hide fold disagreement; the verdict must say how many
+    # folds individually beat the baseline (here 3 of 4).
+    assert "3 of 4 folds" in text.lower()
+
+
 def test_report_flags_insufficient_validation_data(tmp_path: Path):
     text = _write(
         tmp_path,

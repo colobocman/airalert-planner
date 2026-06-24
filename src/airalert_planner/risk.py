@@ -126,7 +126,26 @@ def _score_fold(train: pd.DataFrame, test: pd.DataFrame) -> dict[str, float]:
     }
 
 
-def chronological_validation(panel: pd.DataFrame, n_splits: int = 4) -> dict[str, float]:
+def _rolling_folds(ordered: pd.DataFrame, n_splits: int):
+    """Yield (train, test) frames split on whole timestamps (rolling origin).
+
+    Splitting on distinct ``timestamp_hour`` values -- not row indices -- keeps
+    every row sharing a timestamp on the same side of the cut. Otherwise a
+    boundary that falls inside a group of same-hour rows from different regions
+    would let one region's contemporaneous observation leak into another
+    region's prediction through the shared global-hour estimate.
+    """
+    unique_ts = ordered["timestamp_hour"].drop_duplicates().sort_values().reset_index(drop=True)
+    for train_idx, test_idx in TimeSeriesSplit(n_splits=n_splits).split(unique_ts):
+        train_ts = set(unique_ts.iloc[train_idx])
+        test_ts = set(unique_ts.iloc[test_idx])
+        yield (
+            ordered[ordered["timestamp_hour"].isin(train_ts)],
+            ordered[ordered["timestamp_hour"].isin(test_ts)],
+        )
+
+
+def chronological_validation(panel: pd.DataFrame, n_splits: int = 4) -> dict[str, object]:
     """Rolling-origin validation: expanding-window folds, earlier hours train, later hours test.
 
     A single 80/20 cut makes the metric hostage to one split point. Several
@@ -138,23 +157,22 @@ def chronological_validation(panel: pd.DataFrame, n_splits: int = 4) -> dict[str
         "brier": 0.0,
         "baseline_mae": 0.0,
         "baseline_brier": 0.0,
+        "brier_lift": 0.0,
         "n_splits": 0,
         "train_rows": float(len(panel)),
         "test_rows": 0.0,
         "folds": [],
     }
-    if panel.empty or len(panel) < 4:
+    if panel.empty:
         return insufficient
 
     ordered = panel.sort_values("timestamp_hour").reset_index(drop=True)
-    splits = min(n_splits, len(ordered) - 1)
-    if splits < 1:
+    # Fold on distinct timestamps; TimeSeriesSplit needs at least two folds.
+    splits = min(n_splits, ordered["timestamp_hour"].nunique() - 1)
+    if splits < 2:
         return insufficient
 
-    folds = [
-        _score_fold(ordered.iloc[train_idx], ordered.iloc[test_idx])
-        for train_idx, test_idx in TimeSeriesSplit(n_splits=splits).split(ordered)
-    ]
+    folds = [_score_fold(train, test) for train, test in _rolling_folds(ordered, splits)]
 
     def _mean(key: str) -> float:
         return sum(fold[key] for fold in folds) / len(folds)
