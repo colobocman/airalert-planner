@@ -162,6 +162,56 @@ def test_chronological_validation_reports_brier_lift():
     assert metrics["brier_lift"] > 0.0
 
 
+def _seasonal_panel() -> pd.DataFrame:
+    """One region; hour 6 active 75% of days, hour 18 active 25% -- a real
+    hour-of-day signal that is informative but far from perfect, with no
+    region/weekday signal for the model to exploit beyond the daily cycle."""
+    base = pd.Timestamp("2026-06-01T00:00:00Z")
+    rows = []
+    for day in range(24):
+        ts6 = base + pd.Timedelta(days=day, hours=6)
+        ts18 = base + pd.Timedelta(days=day, hours=18)
+        rows.append({"region": "Kyiv", "timestamp_hour": ts6, "weekday": ts6.weekday(), "hour": 6, "alert_active": 1 if day % 4 != 0 else 0})
+        rows.append({"region": "Kyiv", "timestamp_hour": ts18, "weekday": ts18.weekday(), "hour": 18, "alert_active": 1 if day % 4 == 0 else 0})
+    return pd.DataFrame(rows)
+
+
+def test_chronological_validation_reports_hour_of_day_climatology():
+    metrics = chronological_validation(_seasonal_panel())
+
+    # The hour-of-day climatology is a stronger (lower-Brier) bar than a constant
+    # base-rate predictor, because it captures the daily cycle the model relies on.
+    assert "climatology_brier" in metrics
+    assert "climatology_mae" in metrics
+    assert metrics["climatology_brier"] < metrics["baseline_brier"]
+
+
+def _regional_signal_panel() -> pd.DataFrame:
+    """Two regions, same hours: 'Busy' always alerts, 'Quiet' never. There is no
+    hour signal (so the pooled hour-of-day climatology predicts ~0.5 and is
+    useless), but strong region signal -- so a region-aware model genuinely beats
+    the climatology and earns positive skill."""
+    base = pd.Timestamp("2026-06-01T00:00:00Z")
+    rows = []
+    for day in range(24):
+        for hour in (0, 12):
+            ts = base + pd.Timedelta(days=day, hours=hour)
+            for region, active in (("Busy", 1), ("Quiet", 0)):
+                rows.append({"region": region, "timestamp_hour": ts, "weekday": ts.weekday(), "hour": hour, "alert_active": active})
+    return pd.DataFrame(rows)
+
+
+def test_chronological_validation_reports_brier_skill_score():
+    metrics = chronological_validation(_regional_signal_panel())
+
+    # Skill score normalizes model Brier against the climatology bar:
+    # 1 - model/climatology (0 = no skill beyond the daily cycle, 1 = perfect).
+    assert metrics["brier_skill_score"] == pytest.approx(1 - metrics["brier"] / metrics["climatology_brier"])
+    # Direction matters: region conditioning genuinely beats the pooled hour-of-day
+    # climatology here, so skill must be positive -- a flipped sign would fail.
+    assert metrics["brier_skill_score"] > 0.0
+
+
 def test_chronological_validation_insufficient_below_two_splits():
     # n_splits=1 cannot make a rolling-origin fold; return the sentinel instead
     # of letting TimeSeriesSplit raise. The sentinel must carry the same keys as

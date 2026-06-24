@@ -37,6 +37,40 @@ def test_report_states_model_beats_baseline(tmp_path: Path):
     assert "does not beat" not in text.lower()
 
 
+def test_report_surfaces_climatology_baseline_and_skill_score(tmp_path: Path):
+    text = _write(
+        tmp_path,
+        {
+            "mae": 0.10, "brier": 0.116, "baseline_mae": 0.18, "baseline_brier": 0.186,
+            "brier_lift": 0.070, "climatology_mae": 0.13, "climatology_brier": 0.135,
+            "brier_skill_score": 0.141, "n_splits": 4, "train_rows": 660.0, "test_rows": 165.0,
+        },
+    )
+
+    lower = text.lower()
+    # The stronger bar (hour-of-day climatology) and the normalized skill score
+    # must both be visible, not just the strawman base-rate comparison.
+    assert "climatology" in lower
+    assert "skill score" in lower
+    assert "0.135" in text
+
+
+def test_report_verdict_compares_against_climatology(tmp_path: Path):
+    beats = _write(
+        tmp_path,
+        {"brier": 0.10, "baseline_brier": 0.186, "climatology_brier": 0.135, "brier_skill_score": 0.26,
+         "n_splits": 4, "train_rows": 660.0, "test_rows": 165.0},
+    )
+    assert "beats an hour-of-day climatology" in beats.lower()
+
+    does_not = _write(
+        tmp_path,
+        {"brier": 0.14, "baseline_brier": 0.186, "climatology_brier": 0.135, "brier_skill_score": -0.04,
+         "n_splits": 4, "train_rows": 660.0, "test_rows": 165.0},
+    )
+    assert "does not beat an hour-of-day climatology" in does_not.lower()
+
+
 def test_report_surfaces_rolling_origin_folds_and_lift(tmp_path: Path):
     text = _write(
         tmp_path,

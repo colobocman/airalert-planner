@@ -107,20 +107,30 @@ def risk_table(model: RiskModel, regions: list[str]) -> pd.DataFrame:
 
 
 def _score_fold(train: pd.DataFrame, test: pd.DataFrame) -> dict[str, float]:
-    """Fit on the train slice and score the model and base-rate baseline on test."""
+    """Fit on the train slice; score the model, the base-rate baseline, and an
+    hour-of-day climatology baseline on the test slice."""
     model = fit_risk_model(train)
     preds = [model.predict_one(row.region, int(row.weekday), int(row.hour)) for row in test.itertuples(index=False)]
     y = test["alert_active"].astype(float).to_list()
 
-    # Constant base-rate predictor: the bar the model must clear. On a rare
-    # positive class, low absolute MAE/Brier mean little unless they beat this.
+    # Constant base-rate predictor: the weakest bar. On a rare positive class a
+    # low absolute MAE/Brier means little unless it beats this.
     base_rate = float(train["alert_active"].mean())
     baseline = [base_rate] * len(y)
+
+    # Hour-of-day climatology: predict each hour by its training mean over all
+    # regions/weekdays. This strips out the daily cycle, which dominates the
+    # signal, so beating it is the honest test of whether the model's
+    # region/weekday conditioning adds anything.
+    by_hour = train.groupby("hour")["alert_active"].mean()
+    climatology = [float(by_hour.get(int(row.hour), base_rate)) for row in test.itertuples(index=False)]
     return {
         "mae": float(mean_absolute_error(y, preds)),
         "brier": float(brier_score_loss(y, preds)),
         "baseline_mae": float(mean_absolute_error(y, baseline)),
         "baseline_brier": float(brier_score_loss(y, baseline)),
+        "climatology_mae": float(mean_absolute_error(y, climatology)),
+        "climatology_brier": float(brier_score_loss(y, climatology)),
         "train_rows": float(len(train)),
         "test_rows": float(len(test)),
     }
@@ -157,7 +167,10 @@ def chronological_validation(panel: pd.DataFrame, n_splits: int = 4) -> dict[str
         "brier": 0.0,
         "baseline_mae": 0.0,
         "baseline_brier": 0.0,
+        "climatology_mae": 0.0,
+        "climatology_brier": 0.0,
         "brier_lift": 0.0,
+        "brier_skill_score": 0.0,
         "n_splits": 0,
         "train_rows": float(len(panel)),
         "test_rows": 0.0,
@@ -177,15 +190,26 @@ def chronological_validation(panel: pd.DataFrame, n_splits: int = 4) -> dict[str
     def _mean(key: str) -> float:
         return sum(fold[key] for fold in folds) / len(folds)
 
+    # Equal-weight mean over folds (folds are near-equal size; the standard BSS
+    # below is the ratio of these averaged Brier scores).
     brier = _mean("brier")
     baseline_brier = _mean("baseline_brier")
+    climatology_brier = _mean("climatology_brier")
+    # Brier skill score over the climatology bar: 1 - model/climatology.
+    # 0 = no skill beyond the daily cycle, 1 = perfect, negative = worse than it.
+    # climatology_brier == 0 means the daily cycle already predicts perfectly, so
+    # there is no skill to add and the score is undefined -> report 0.0.
+    skill = 1.0 - brier / climatology_brier if climatology_brier > 0 else 0.0
     return {
         "mae": _mean("mae"),
         "brier": brier,
         "baseline_mae": _mean("baseline_mae"),
         "baseline_brier": baseline_brier,
+        "climatology_mae": _mean("climatology_mae"),
+        "climatology_brier": climatology_brier,
         # Positive lift = model beats the constant base-rate predictor's Brier.
         "brier_lift": baseline_brier - brier,
+        "brier_skill_score": skill,
         "n_splits": len(folds),
         # Largest expanding window trained / total out-of-sample rows scored.
         "train_rows": folds[-1]["train_rows"],
