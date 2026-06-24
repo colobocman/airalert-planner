@@ -107,7 +107,8 @@ def risk_table(model: RiskModel, regions: list[str]) -> pd.DataFrame:
 
 
 def _score_fold(train: pd.DataFrame, test: pd.DataFrame) -> dict[str, float]:
-    """Fit on the train slice and score the model and base-rate baseline on test."""
+    """Fit on the train slice; score the model, the base-rate baseline, and an
+    hour-of-day climatology baseline on the test slice."""
     model = fit_risk_model(train)
     preds = [model.predict_one(row.region, int(row.weekday), int(row.hour)) for row in test.itertuples(index=False)]
     y = test["alert_active"].astype(float).to_list()
@@ -189,11 +190,15 @@ def chronological_validation(panel: pd.DataFrame, n_splits: int = 4) -> dict[str
     def _mean(key: str) -> float:
         return sum(fold[key] for fold in folds) / len(folds)
 
+    # Equal-weight mean over folds (folds are near-equal size; the standard BSS
+    # below is the ratio of these averaged Brier scores).
     brier = _mean("brier")
     baseline_brier = _mean("baseline_brier")
     climatology_brier = _mean("climatology_brier")
     # Brier skill score over the climatology bar: 1 - model/climatology.
     # 0 = no skill beyond the daily cycle, 1 = perfect, negative = worse than it.
+    # climatology_brier == 0 means the daily cycle already predicts perfectly, so
+    # there is no skill to add and the score is undefined -> report 0.0.
     skill = 1.0 - brier / climatology_brier if climatology_brier > 0 else 0.0
     return {
         "mae": _mean("mae"),

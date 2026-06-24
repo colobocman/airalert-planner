@@ -40,9 +40,9 @@ def cmd_analyze(args: argparse.Namespace) -> None:
     print(f"Wrote outputs to {out}")
     print(f"Valid events: {len(loaded.events)}; invalid rows: {len(loaded.invalid_rows)}")
     print(
-        f"Validation: Brier={validation['brier']:.3f} "
-        f"vs hour-of-day climatology {validation['climatology_brier']:.3f} "
-        f"(skill {validation['brier_skill_score']:+.3f})"
+        f"Validation: Brier={validation.get('brier', 0.0):.3f} "
+        f"vs hour-of-day climatology {validation.get('climatology_brier', 0.0):.3f} "
+        f"(skill {validation.get('brier_skill_score', 0.0):+.3f})"
     )
 
 

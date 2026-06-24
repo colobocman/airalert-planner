@@ -55,12 +55,13 @@ def _climatology_verdict(validation: dict[str, object]) -> str:
         return ""
     if validation.get("brier", 0.0) < validation.get("climatology_brier", 0.0):
         return (
-            "It also beats an hour-of-day climatology baseline, so region/weekday conditioning "
-            "adds value beyond the daily cycle."
+            "It also beats an hour-of-day climatology baseline (pooled across regions), so the "
+            "model's region-level conditioning adds value beyond the average daily cycle. (This "
+            "bar pools regions, so it does not isolate weekday effects.)"
         )
     return (
         "It does not beat an hour-of-day climatology baseline, so on this data the daily cycle "
-        "explains the result and region/weekday conditioning adds little."
+        "explains the result and the model's extra conditioning adds little."
     )
 
 
