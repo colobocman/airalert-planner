@@ -20,7 +20,7 @@ The first MVP exposes this through a reproducible CLI. A Telegram bot wrapper is
 - Builds an explainable historical-frequency risk baseline.
 - Runs rolling-origin (expanding-window) chronological validation — not a random split — reported as Brier *lift* over a constant base-rate baseline so a low score on rare alerts is not mistaken for skill.
 - Generates summary CSV files, charts, and a Markdown report.
-- Provides a CLI planning assistant for region/time-window risk queries.
+- Provides a CLI planning assistant for region/time-window risk queries, labelling each hour Low/Medium/High for trip, event, and shift timing.
 - Provides optional Telegram bot wiring without duplicating core logic.
 
 ## Quick start
@@ -57,6 +57,8 @@ python -m airalert_planner.cli risk \
 ```
 
 Hours are Europe/Kyiv local time, so `--from-hour 18` means 18:00 in Kyiv.
+
+The window average and every hour are labelled with an interpretation band — **Low** (below 0.10), **Medium** (0.10–0.30), or **High** (0.30 or higher) — and the output explains each band inline, so a trip, event, or shift can be timed against the historically quieter hours. The bands are planning heuristics over historical frequency, not safety predictions; the safety disclaimer is always printed.
 
 Compare a sequence of regions for a route-like plan:
 

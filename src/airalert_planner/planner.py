@@ -13,6 +13,28 @@ LOW_CONFIDENCE_SUPPORT = 3
 # Risk spread under this is treated as no meaningful difference across the window.
 FLAT_RISK_EPSILON = 1e-9
 
+# Interpretation bands for the historical risk fraction (share of matching past
+# hours under an alert). The cutoffs are planning heuristics for reading the
+# number at a glance, not safety thresholds or predictions.
+LOW_RISK_CEILING = 0.10
+MEDIUM_RISK_CEILING = 0.30
+
+_BAND_LEGEND = (
+    "Risk bands (share of matching past hours that were under an alert):",
+    "- Low (below 0.10): historically among the quieter windows for this region and time.",
+    "- Medium (0.10 to 0.30): alerts in a moderate share of comparable past hours.",
+    "- High (0.30 or higher): historically among the busier windows; if timing is flexible, favour a lower-band hour.",
+)
+
+
+def risk_band(risk: float) -> str:
+    """Label a historical risk fraction as Low / Medium / High for quick reading."""
+    if risk < LOW_RISK_CEILING:
+        return "Low"
+    if risk < MEDIUM_RISK_CEILING:
+        return "Medium"
+    return "High"
+
 
 @dataclass(frozen=True)
 class WindowRiskSummary:
@@ -31,13 +53,19 @@ class WindowRiskSummary:
         lines = [
             f"Region: {self.region}",
             f"Window: {self.date} {self.from_hour:02d}:00-{self.to_hour:02d}:00 (Europe/Kyiv)",
-            f"Average historical risk: {self.average_risk:.2f}",
+            f"Average historical risk: {self.average_risk:.2f} ({risk_band(self.average_risk)})",
         ]
         if flat:
             lines.append("No material difference in historical risk across this window.")
         else:
-            lines.append(f"Relatively lower-risk hour: {self.lowest_risk_hour:02d}:00")
-            lines.append(f"Relatively higher-risk hour: {self.highest_risk_hour:02d}:00")
+            lowest = min(self.rows, key=lambda row: row["risk"])
+            highest = max(self.rows, key=lambda row: row["risk"])
+            lines.append(
+                f"Relatively lower-risk hour: {lowest['hour']:02d}:00 ({lowest['risk']:.2f}, {risk_band(lowest['risk'])})"
+            )
+            lines.append(
+                f"Relatively higher-risk hour: {highest['hour']:02d}:00 ({highest['risk']:.2f}, {risk_band(highest['risk'])})"
+            )
 
         max_support = max(row["support"] for row in self.rows)
         if max_support < LOW_CONFIDENCE_SUPPORT:
@@ -47,7 +75,11 @@ class WindowRiskSummary:
 
         lines.extend(["", "Hourly profile:"])
         for row in self.rows:
-            lines.append(f"- {row['hour']:02d}:00 risk={row['risk']:.2f} (n={row['support']})")
+            lines.append(
+                f"- {row['hour']:02d}:00 risk={row['risk']:.2f} {risk_band(row['risk'])} (n={row['support']})"
+            )
+        lines.append("")
+        lines.extend(_BAND_LEGEND)
         lines.extend(
             [
                 "",
