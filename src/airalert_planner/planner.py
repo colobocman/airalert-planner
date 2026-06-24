@@ -8,6 +8,11 @@ from .risk import RiskModel
 
 SAFETY_DISCLAIMER = "Historical planning support only. Always follow official alerts and local security guidance."
 
+# Below this many matching historical hours, an estimate is flagged low-confidence.
+LOW_CONFIDENCE_SUPPORT = 3
+# Risk spread under this is treated as no meaningful difference across the window.
+FLAT_RISK_EPSILON = 1e-9
+
 
 @dataclass(frozen=True)
 class WindowRiskSummary:
@@ -21,18 +26,35 @@ class WindowRiskSummary:
     rows: list[dict]
 
     def to_text(self) -> str:
+        risks = [row["risk"] for row in self.rows]
+        flat = max(risks) - min(risks) < FLAT_RISK_EPSILON
         lines = [
             f"Region: {self.region}",
-            f"Window: {self.date} {self.from_hour:02d}:00-{self.to_hour:02d}:00",
+            f"Window: {self.date} {self.from_hour:02d}:00-{self.to_hour:02d}:00 (Europe/Kyiv)",
             f"Average historical risk: {self.average_risk:.2f}",
-            f"Relatively lower-risk hour: {self.lowest_risk_hour:02d}:00",
-            f"Relatively higher-risk hour: {self.highest_risk_hour:02d}:00",
-            "",
-            "Hourly profile:",
         ]
+        if flat:
+            lines.append("No material difference in historical risk across this window.")
+        else:
+            lines.append(f"Relatively lower-risk hour: {self.lowest_risk_hour:02d}:00")
+            lines.append(f"Relatively higher-risk hour: {self.highest_risk_hour:02d}:00")
+
+        max_support = max(row["support"] for row in self.rows)
+        if max_support < LOW_CONFIDENCE_SUPPORT:
+            lines.append(
+                f"Low confidence: at most {max_support} matching past hour(s) of history for this window."
+            )
+
+        lines.extend(["", "Hourly profile:"])
         for row in self.rows:
-            lines.append(f"- {row['hour']:02d}:00 risk={row['risk']:.2f}")
-        lines.extend(["", SAFETY_DISCLAIMER])
+            lines.append(f"- {row['hour']:02d}:00 risk={row['risk']:.2f} (n={row['support']})")
+        lines.extend(
+            [
+                "",
+                "risk = share of matching past hours that were under an alert (0 = never, 1 = always); n = matching hours observed.",
+                SAFETY_DISCLAIMER,
+            ]
+        )
         return "\n".join(lines)
 
 
@@ -41,7 +63,11 @@ def summarize_window(model: RiskModel, region: str, date: str, from_hour: int, t
         raise ValueError("Expected 0 <= from_hour < to_hour <= 24")
     weekday = pd.Timestamp(date).weekday()
     rows = [
-        {"hour": hour, "risk": model.predict_one(region, weekday, hour)}
+        {
+            "hour": hour,
+            "risk": model.predict_one(region, weekday, hour),
+            "support": model.support_one(region, weekday, hour),
+        }
         for hour in range(from_hour, to_hour)
     ]
     lowest = min(rows, key=lambda row: row["risk"])

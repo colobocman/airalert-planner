@@ -66,8 +66,8 @@ def make_parser() -> argparse.ArgumentParser:
     risk.add_argument("--input", default="data/sample_alerts.csv")
     risk.add_argument("--region", required=True)
     risk.add_argument("--date", required=True)
-    risk.add_argument("--from-hour", type=int, required=True)
-    risk.add_argument("--to-hour", type=int, required=True)
+    risk.add_argument("--from-hour", type=int, required=True, help="start hour 0-23, Europe/Kyiv local time")
+    risk.add_argument("--to-hour", type=int, required=True, help="end hour 1-24 (exclusive), Europe/Kyiv local time")
     risk.set_defaults(func=cmd_risk)
 
     trip = sub.add_parser("plan-trip", help="Summarize a route-like sequence of regions")

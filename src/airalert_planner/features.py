@@ -4,6 +4,11 @@ import math
 
 import pandas as pd
 
+# Hour-of-day and weekday are reported in this local timezone so that a CLI
+# query like "--from-hour 18" means 18:00 local, not 18:00 UTC. Bucketing stays
+# in UTC; only the hour/weekday labels are localized.
+DISPLAY_TZ = "Europe/Kyiv"
+
 
 def build_hourly_panel(events: pd.DataFrame) -> pd.DataFrame:
     """Split alert intervals into hourly region buckets.
@@ -69,8 +74,9 @@ def build_hourly_panel(events: pd.DataFrame) -> pd.DataFrame:
     panel["alert_count"] = panel["alert_count"].fillna(0).astype(int)
     panel["alert_minutes"] = panel["alert_minutes"].fillna(0.0)
 
-    panel["hour"] = panel["timestamp_hour"].dt.hour
-    panel["weekday"] = panel["timestamp_hour"].dt.weekday
+    local_hour = panel["timestamp_hour"].dt.tz_convert(DISPLAY_TZ)
+    panel["hour"] = local_hour.dt.hour
+    panel["weekday"] = local_hour.dt.weekday
     panel["is_night"] = panel["hour"].map(lambda h: h >= 22 or h < 6)
     panel["alert_minutes"] = panel["alert_minutes"].map(lambda value: round(float(value), 3) if not math.isnan(value) else value)
     return panel.reset_index(drop=True)
