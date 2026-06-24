@@ -45,22 +45,31 @@ def write_report(summary: pd.DataFrame, validation: dict[str, float], out_path: 
         lines.append("No valid alert events were found.")
     else:
         lines.extend(_markdown_table(summary))
-    lines.extend(
+    n_splits = int(validation.get("n_splits", 0))
+    validation_lines = [
+        "",
+        "## Chronological validation",
+        "",
+        f"- MAE: {validation.get('mae', 0.0):.3f} (base-rate baseline {validation.get('baseline_mae', 0.0):.3f})",
+        f"- Brier score: {validation.get('brier', 0.0):.3f} (base-rate baseline {validation.get('baseline_brier', 0.0):.3f})",
+    ]
+    if n_splits > 0:
+        validation_lines.append(
+            f"- Brier lift over base rate: {validation.get('brier_lift', 0.0):+.3f} (positive = model adds skill)"
+        )
+        validation_lines.append(f"- Method: {n_splits} rolling-origin (expanding-window) folds")
+    validation_lines.extend(
         [
-            "",
-            "## Chronological validation",
-            "",
-            f"- MAE: {validation.get('mae', 0.0):.3f} (base-rate baseline {validation.get('baseline_mae', 0.0):.3f})",
-            f"- Brier score: {validation.get('brier', 0.0):.3f} (base-rate baseline {validation.get('baseline_brier', 0.0):.3f})",
-            f"- Train rows: {validation.get('train_rows', 0.0):.0f}",
-            f"- Test rows: {validation.get('test_rows', 0.0):.0f}",
+            f"- Train rows (largest fold): {validation.get('train_rows', 0.0):.0f}",
+            f"- Test rows (across folds): {validation.get('test_rows', 0.0):.0f}",
             "",
             _validation_verdict(validation),
             "",
-            "Validation uses a single 80/20 chronological split; regions whose alert history ends "
-            "before the split boundary may be absent from the test fold, and the hourly panel is "
-            "densified over each region's full observed range before splitting. Read the metrics as "
-            "indicative, not a rigorous out-of-sample estimate.",
+            "Validation uses rolling-origin (expanding-window) chronological folds, so every test "
+            "row is scored by a model trained only on earlier hours. The hourly panel is densified "
+            "over each region's full observed range before folding, and short-history regions "
+            "contribute fewer test rows. Read the metrics as indicative, not a production-grade "
+            "out-of-sample guarantee.",
             "",
             "## Safety note",
             "",
@@ -68,4 +77,5 @@ def write_report(summary: pd.DataFrame, validation: dict[str, float], out_path: 
             "",
         ]
     )
+    lines.extend(validation_lines)
     Path(out_path).write_text("\n".join(lines), encoding="utf-8")

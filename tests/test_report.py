@@ -37,6 +37,21 @@ def test_report_states_model_beats_baseline(tmp_path: Path):
     assert "does not beat" not in text.lower()
 
 
+def test_report_surfaces_rolling_origin_folds_and_lift(tmp_path: Path):
+    text = _write(
+        tmp_path,
+        {
+            "mae": 0.04, "brier": 0.050, "baseline_mae": 0.06, "baseline_brier": 0.063,
+            "brier_lift": 0.013, "n_splits": 4, "train_rows": 660.0, "test_rows": 165.0,
+        },
+    )
+
+    # The report must disclose the validation method (rolling-origin folds) and
+    # the headline lift over the base rate, not imply a single fragile split.
+    assert "4 rolling-origin" in text.lower()
+    assert "lift" in text.lower()
+
+
 def test_report_flags_insufficient_validation_data(tmp_path: Path):
     text = _write(
         tmp_path,

@@ -75,6 +75,40 @@ def test_support_one_reflects_only_the_exact_slot():
     assert model.support_one("Kyiv", 6, 18) == 0
 
 
+def _rolling_panel() -> pd.DataFrame:
+    """16 contiguous hourly rows in time order for rolling-origin validation."""
+    return pd.DataFrame(
+        [
+            {
+                "region": "Kyiv",
+                "timestamp_hour": pd.Timestamp("2026-06-01T00:00:00Z") + pd.Timedelta(hours=i),
+                "weekday": 0,
+                "hour": i % 24,
+                "alert_active": i % 2,
+            }
+            for i in range(16)
+        ]
+    )
+
+
+def test_chronological_validation_uses_rolling_origin_folds():
+    metrics = chronological_validation(_rolling_panel())
+
+    # Rolling-origin validation evaluates several expanding-window folds, not a
+    # single 80/20 split, so the estimate is not hostage to one cut point.
+    assert metrics["n_splits"] >= 2
+    assert len(metrics["folds"]) == metrics["n_splits"]
+    assert all("brier" in fold for fold in metrics["folds"])
+
+
+def test_chronological_validation_reports_brier_lift():
+    metrics = chronological_validation(_rolling_panel())
+
+    # Lift is the headline number: how much the model improves on the base-rate
+    # baseline's Brier score. Positive means the model adds skill.
+    assert metrics["brier_lift"] == pytest.approx(metrics["baseline_brier"] - metrics["brier"])
+
+
 def test_chronological_validation_returns_metrics():
     panel = pd.DataFrame(
         [
