@@ -26,13 +26,15 @@ def load_alert_events(path: str | Path) -> LoadResult:
         raise ValueError(f"Missing required columns: {sorted(missing)}")
 
     out = df.copy()
+    region_missing = out["region"].isna()
     out["region"] = out["region"].astype(str).str.strip()
     out["started_at"] = pd.to_datetime(out["started_at"], errors="coerce", utc=True)
     out["ended_at"] = pd.to_datetime(out["ended_at"], errors="coerce", utc=True)
     out["duration_minutes"] = (out["ended_at"] - out["started_at"]).dt.total_seconds() / 60.0
 
     invalid_mask = (
-        out["region"].eq("")
+        region_missing
+        | out["region"].eq("")
         | out["started_at"].isna()
         | out["ended_at"].isna()
         | out["duration_minutes"].isna()

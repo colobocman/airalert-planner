@@ -18,7 +18,7 @@ The first MVP exposes this through a reproducible CLI. A Telegram bot wrapper is
 - Normalizes timestamps and durations.
 - Converts alert intervals into an hourly regional time-series panel.
 - Builds an explainable historical-frequency risk baseline.
-- Validates the baseline with chronological splitting, not random splitting.
+- Runs a chronological (not random) validation check, reported against a base-rate baseline so a low score on rare alerts is not mistaken for skill.
 - Generates summary CSV files, charts, and a Markdown report.
 - Provides a CLI planning assistant for region/time-window risk queries.
 - Provides optional Telegram bot wiring without duplicating core logic.
@@ -56,6 +56,8 @@ python -m airalert_planner.cli risk \
   --to-hour 22
 ```
 
+Hours are Europe/Kyiv local time, so `--from-hour 18` means 18:00 in Kyiv.
+
 Compare a sequence of regions for a route-like plan:
 
 ```bash
@@ -92,7 +94,7 @@ Required fields:
 
 - `region`: region or city label.
 - `started_at`: alert start time, ISO-like datetime.
-- `ended_at`: alert end time, ISO-like datetime. Missing values are allowed but excluded from duration/hourly-panel calculations by default.
+- `ended_at`: alert end time, ISO-like datetime. Rows with a missing/unparseable `ended_at` or a non-positive duration are reported as invalid rows and excluded from analysis.
 
 See `data/README.md` and `docs/assumptions.md`.
 
@@ -100,10 +102,10 @@ See `data/README.md` and `docs/assumptions.md`.
 
 1. **Normalize events** — parse timestamps, compute duration, flag invalid rows.
 2. **Build hourly panel** — split interval events into hourly buckets by region.
-3. **Create features** — hour, weekday, night/day, alert minutes.
-4. **Fit baseline** — historical alert probability by `region + weekday + hour`.
+3. **Create features** — hour, weekday, night/day, alert minutes. Hour and weekday are expressed in Europe/Kyiv local time, so a query for hour 18 means 18:00 in Kyiv.
+4. **Fit baseline** — for each `region + weekday + hour`, risk is the share of those past hours that were under an alert (0 = never, 1 = always), smoothed toward broader averages when history is thin.
 5. **Fallback for sparse data** — use `region + hour`, then `global hour`, then global mean.
-6. **Validate chronologically** — train on earlier time periods and evaluate on later time periods.
+6. **Validate chronologically** — train on earlier time periods and evaluate on later ones, always alongside a constant base-rate baseline. Because alerts are a rare positive class, low MAE/Brier are easy to obtain; the model is only informative where it beats that baseline (on the small synthetic sample, it does not).
 7. **Expose planning interface** — turn risk scores into practical guidance for selected windows.
 
 ## Why a simple baseline?

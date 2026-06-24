@@ -33,3 +33,33 @@ def test_load_alert_events_requires_columns(tmp_path: Path):
 
     with pytest.raises(ValueError):
         load_alert_events(path)
+
+
+def test_load_alert_events_flags_unparseable_timestamp(tmp_path: Path):
+    path = tmp_path / "alerts.csv"
+    path.write_text("region,started_at,ended_at\nKyiv,not-a-date,2026-06-01T02:00:00+03:00\n")
+
+    result = load_alert_events(path)
+
+    assert result.events.empty
+    assert len(result.invalid_rows) == 1
+
+
+def test_load_alert_events_flags_empty_region(tmp_path: Path):
+    path = tmp_path / "alerts.csv"
+    path.write_text("region,started_at,ended_at\n,2026-06-01T01:00:00+03:00,2026-06-01T02:00:00+03:00\n")
+
+    result = load_alert_events(path)
+
+    assert result.events.empty
+    assert len(result.invalid_rows) == 1
+
+
+def test_load_alert_events_flags_zero_duration(tmp_path: Path):
+    path = tmp_path / "alerts.csv"
+    path.write_text("region,started_at,ended_at\nKyiv,2026-06-01T01:00:00+03:00,2026-06-01T01:00:00+03:00\n")
+
+    result = load_alert_events(path)
+
+    assert result.events.empty
+    assert len(result.invalid_rows) == 1
