@@ -18,7 +18,7 @@ The first MVP exposes this through a reproducible CLI. A Telegram bot wrapper is
 - Normalizes timestamps and durations.
 - Converts alert intervals into an hourly regional time-series panel.
 - Builds an explainable historical-frequency risk baseline.
-- Runs rolling-origin (expanding-window) chronological validation — not a random split — reported as Brier *lift* over a constant base-rate baseline so a low score on rare alerts is not mistaken for skill.
+- Runs rolling-origin (expanding-window) chronological validation — not a random split — scored against two baselines: a constant base rate and a stronger hour-of-day climatology, reported as a Brier skill score so a low score on rare alerts (or a win driven only by the daily cycle) is not mistaken for skill.
 - Generates summary CSV files, charts, and a Markdown report.
 - Provides a CLI planning assistant for region/time-window risk queries, labelling each hour Low/Medium/High for trip, event, and shift timing.
 - Provides optional Telegram bot wiring without duplicating core logic.
@@ -115,7 +115,7 @@ See `data/README.md` and `docs/assumptions.md`.
 3. **Create features** — hour, weekday, night/day, alert minutes. Hour and weekday are expressed in Europe/Kyiv local time, so a query for hour 18 means 18:00 in Kyiv.
 4. **Fit baseline** — for each `region + weekday + hour`, risk is the share of those past hours that were under an alert (0 = never, 1 = always), smoothed toward broader averages when history is thin.
 5. **Fallback for sparse data** — use `region + hour`, then `global hour`, then global mean.
-6. **Validate chronologically** — rolling-origin (expanding-window) folds: each fold trains on earlier hours and is scored on later ones, never the reverse, always alongside a constant base-rate baseline. The headline number is Brier *lift* over that baseline. Because alerts are a rare positive class, low absolute MAE/Brier are easy to obtain, so only positive lift counts as skill. On the bundled synthetic sample — which carries a deliberate, time-stable region+hour pattern — the model beats the baseline; this demonstrates the method, not real-world predictive certainty.
+6. **Validate chronologically** — rolling-origin (expanding-window) folds: each fold trains on earlier hours and is scored on later ones, never the reverse. The model is scored against two baselines: a **constant base rate** (the weak bar — easy to beat on a rare positive class) and a stronger **hour-of-day climatology** that predicts each hour by its historical time-of-day mean. Because the daily cycle dominates the signal, beating the constant base rate is near-trivial; the honest test is the **Brier skill score** over the climatology (0 = no skill beyond the daily cycle, 1 = perfect). On the bundled synthetic sample the model beats both bars — the climatology too — so region/weekday conditioning adds value beyond the daily cycle; this demonstrates the method, not real-world predictive certainty.
 7. **Expose planning interface** — turn risk scores into practical guidance for selected windows.
 
 ## Why a simple baseline?

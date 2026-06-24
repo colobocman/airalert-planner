@@ -14,6 +14,7 @@
 - Historical alert frequency can provide useful planning context.
 - It is not a reliable prediction of future attacks.
 - Chronological validation is required to avoid time-series leakage.
+- A constant base-rate baseline is too weak when a daily cycle dominates the signal, so the model is also scored against an hour-of-day climatology; the reported Brier skill score is measured over that stronger bar (positive = skill beyond the daily cycle).
 - Region names in real datasets may require normalization.
 
 ## Safety limitations

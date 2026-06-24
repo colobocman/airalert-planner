@@ -45,6 +45,25 @@ def _validation_verdict(validation: dict[str, object]) -> str:
     )
 
 
+def _climatology_verdict(validation: dict[str, object]) -> str:
+    """Honest line on the stronger bar: the hour-of-day climatology.
+
+    Beating a constant base rate is near-trivial when a daily cycle dominates;
+    the climatology strips that cycle out, so this is the test that matters.
+    """
+    if validation.get("test_rows", 0.0) <= 0 or "climatology_brier" not in validation:
+        return ""
+    if validation.get("brier", 0.0) < validation.get("climatology_brier", 0.0):
+        return (
+            "It also beats an hour-of-day climatology baseline, so region/weekday conditioning "
+            "adds value beyond the daily cycle."
+        )
+    return (
+        "It does not beat an hour-of-day climatology baseline, so on this data the daily cycle "
+        "explains the result and region/weekday conditioning adds little."
+    )
+
+
 def write_report(summary: pd.DataFrame, validation: dict[str, float], out_path: str | Path) -> None:
     lines = [
         "# AirAlert Planner Report",
@@ -64,10 +83,20 @@ def write_report(summary: pd.DataFrame, validation: dict[str, float], out_path: 
         f"- MAE: {validation.get('mae', 0.0):.3f} (base-rate baseline {validation.get('baseline_mae', 0.0):.3f})",
         f"- Brier score: {validation.get('brier', 0.0):.3f} (base-rate baseline {validation.get('baseline_brier', 0.0):.3f})",
     ]
+    if "climatology_brier" in validation:
+        validation_lines.append(
+            f"- Hour-of-day climatology Brier: {validation.get('climatology_brier', 0.0):.3f} "
+            "(stronger bar: strips out the daily cycle)"
+        )
     if n_splits > 0:
         validation_lines.append(
             f"- Brier lift over base rate: {validation.get('brier_lift', 0.0):+.3f} (positive = model adds skill)"
         )
+        if "climatology_brier" in validation:
+            validation_lines.append(
+                f"- Brier skill score vs climatology: {validation.get('brier_skill_score', 0.0):+.3f} "
+                "(0 = no skill beyond the daily cycle, 1 = perfect)"
+            )
         validation_lines.append(f"- Method: {n_splits} rolling-origin (expanding-window) folds")
     validation_lines.extend(
         [
@@ -75,9 +104,12 @@ def write_report(summary: pd.DataFrame, validation: dict[str, float], out_path: 
             f"- Test rows (across folds): {validation.get('test_rows', 0.0):.0f}",
             "",
             _validation_verdict(validation),
-            "",
         ]
     )
+    climatology_verdict = _climatology_verdict(validation)
+    if climatology_verdict:
+        validation_lines.append(climatology_verdict)
+    validation_lines.append("")
     if n_splits > 0:
         validation_lines.append(
             "Validation uses rolling-origin (expanding-window) chronological folds split on whole "

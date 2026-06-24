@@ -39,7 +39,11 @@ def cmd_analyze(args: argparse.Namespace) -> None:
 
     print(f"Wrote outputs to {out}")
     print(f"Valid events: {len(loaded.events)}; invalid rows: {len(loaded.invalid_rows)}")
-    print(f"Validation: MAE={validation['mae']:.3f}, Brier={validation['brier']:.3f}")
+    print(
+        f"Validation: Brier={validation['brier']:.3f} "
+        f"vs hour-of-day climatology {validation['climatology_brier']:.3f} "
+        f"(skill {validation['brier_skill_score']:+.3f})"
+    )
 
 
 def cmd_risk(args: argparse.Namespace) -> None:
