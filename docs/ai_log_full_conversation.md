@@ -1061,3 +1061,171 @@ It does not include hidden system/developer prompts verbatim. Instead, it docume
 A possible final reflection derived from this interaction:
 
 > My first instinct was to build an interface around air raid alerts, but the AI-assisted planning process helped separate product ambition from MVP discipline. We designed AirAlert Planner as an analytical core first: data normalization, hourly regional time-series features, explainable historical risk scoring, chronological validation, and then a CLI planning assistant. Telegram was kept optional to avoid distracting from reproducibility and methodology. The AI was useful not only for generating files, but for challenging scope, finding a modeling flaw where risk was trivially 1.0, fixing dependency issues, and verifying the repository through tests, lint, CLI execution, and CI.
+
+---
+
+# 19. Post-development Repository Review and Submission Fit Check
+
+**Date/time:** 2026-06-25T08:19:21+03:00  
+**Reviewer:** Hermes Agent, after re-reading the local repository and running verification commands.
+
+## User message that triggered this review
+
+```text
+тепер повернемось до роботи над тестовим завданням в AI summer school. перечитай репозиторій, і дай відповідь чи він є задовільним вирішенням поставленої задачі в завданні? якщо так, то додай результат та це повідомлення в AI LOG який ти робив раніше
+```
+
+## Repository state reviewed
+
+Local repository:
+
+```text
+/home/roma/airalert-planner
+```
+
+Public repository:
+
+```text
+https://github.com/colobocman/airalert-planner
+```
+
+Recent GitHub Actions state observed during review:
+
+```text
+completed success — CI — main — push — 2026-06-25T05:13:31Z
+```
+
+The repository now contains a product-oriented Python MVP with:
+
+- `README.md` explaining product purpose, quick start, methodology, limitations, CLI usage, and optional Telegram bot usage;
+- `data/sample_alerts.csv` synthetic sample data so the project runs immediately;
+- core modules for loading/validating alert intervals, building an hourly regional time-series panel, fitting an explainable historical-frequency risk baseline, chronological validation, planning summaries, report generation, and plots;
+- CLI commands for full analysis, region/time-window risk query, and route-like region sequence planning;
+- optional Telegram wrapper that reuses planner logic instead of duplicating business logic;
+- tests covering data/features/risk/planner/analysis/report/CLI behavior;
+- generated `outputs/` artifacts: CSVs, Markdown report, and figures;
+- Claude Code project context files to support iterative AI-assisted development.
+
+## Verification performed during this review
+
+The following command was run locally from the repository root:
+
+```bash
+source .venv/bin/activate && make test && make lint && make run && \
+python -m airalert_planner.cli risk \
+  --input data/sample_alerts.csv \
+  --region Kyiv \
+  --date 2026-06-26 \
+  --from-hour 18 \
+  --to-hour 22 && \
+python -m airalert_planner.cli plan-trip \
+  --input data/sample_alerts.csv \
+  --regions Ivano-Frankivsk Lviv Rivne Zhytomyr Kyiv \
+  --date 2026-06-26
+```
+
+Result after rebasing onto the latest `origin/main` changes from Claude Code development:
+
+```text
+pytest -q
+..................................................................       [100%]
+66 passed in 10.34s
+
+ruff check src tests
+All checks passed!
+
+python -m airalert_planner.cli analyze --input data/sample_alerts.csv --out outputs
+Wrote outputs to outputs
+Valid events: 1337; invalid rows: 0
+Validation: Brier=0.117 vs hour-of-day climatology 0.135 (skill +0.133)
+```
+
+Example risk CLI output:
+
+```text
+Region: Kyiv
+Window: 2026-06-26 18:00-22:00 (Europe/Kyiv)
+Average historical risk: 0.40 (High)
+Relatively lower-risk hour: 18:00 (0.26, Medium)
+Relatively higher-risk hour: 21:00 (0.56, High)
+
+Hourly profile:
+- 18:00 risk=0.26 Medium (n=8)
+- 19:00 risk=0.31 High (n=8)
+- 20:00 risk=0.46 High (n=8)
+- 21:00 risk=0.56 High (n=8)
+
+Risk bands (share of matching past hours that were under an alert):
+- Low (below 0.10): historically among the quieter windows for this region and time.
+- Medium (0.10 to 0.30): alerts in a moderate share of comparable past hours.
+- High (0.30 or higher): historically among the busier windows for this region and time.
+
+risk = share of matching past hours that were under an alert (0 = never, 1 = always); n = matching hours observed.
+Historical planning support only. Always follow official alerts and local security guidance.
+```
+
+Example route-like planning output:
+
+```text
+Route-like regional risk sketch for 2026-06-26
+
+- Ivano-Frankivsk: avg daytime risk=0.04 (Low), lower around 13:00
+- Lviv: avg daytime risk=0.05 (Low), lower around 13:00
+- Rivne: avg daytime risk=0.08 (Low), lower around 13:00
+- Zhytomyr: avg daytime risk=0.09 (Low), lower around 13:00
+- Kyiv: avg daytime risk=0.15 (Medium), lower around 15:00
+
+This is region-sequence planning, not geospatial routing.
+Historical planning support only. Always follow official alerts and local security guidance.
+```
+
+After noticing one stale internal docstring in `features.py` that said zero-alert hours were only a future production improvement, the assistant corrected it to match the actual implementation: the MVP already densifies each regional observed time span with explicit zero-alert hours. After rebasing that correction onto the latest main branch, verification was run again:
+
+```text
+pytest -q
+..................................................................       [100%]
+66 passed in 10.34s
+
+ruff check src tests
+All checks passed!
+
+python -m airalert_planner.cli analyze --input data/sample_alerts.csv --out outputs
+Wrote outputs to outputs
+Valid events: 1337; invalid rows: 0
+Validation: Brier=0.117 vs hour-of-day climatology 0.135 (skill +0.133)
+```
+
+## Assessment: is this a satisfactory solution to the task?
+
+Yes — as an MVP submission, the repository is a satisfactory solution to the stated AI Summer School test task, assuming the task is evaluated as a compact, reproducible Python mini-project around time-series analysis of Ukrainian air raid alerts plus an AI-assisted process log.
+
+Reasons:
+
+1. It directly addresses the domain: historical Ukrainian air raid alert intervals.
+2. It performs actual time-series transformation: interval events are converted into hourly regional time buckets with local Europe/Kyiv hour and weekday features.
+3. It includes an explainable analytical baseline: historical alert-active probability by region/weekday/hour with sparse-data fallback and shrinkage.
+4. It avoids a common time-series mistake: validation is chronological, not random.
+5. It is honest about model limitations: the report compares the model against an hour-of-day climatology baseline and reports a Brier skill score instead of relying on misleading low absolute error.
+6. It is reproducible: the repo has sample data, setup commands, tests, generated outputs, and CI.
+7. It is product-oriented without losing task fit: the CLI planning assistant and optional Telegram adapter make the analysis practically useful while keeping the analytical core central.
+8. It documents AI usage transparently: the repository includes AI logs, prompt/context decisions, verification outputs, encountered issues, and fixes.
+
+## Remaining limitations to be transparent about
+
+The solution should not be presented as a finished operational safety system. The most important limitations are:
+
+- the included dataset is synthetic and small;
+- the model is an explainable historical baseline, not a reliable forecast of future attacks;
+- validation is indicative, not a rigorous production-grade evaluation;
+- route support is a region-sequence sketch, not geospatial routing;
+- real deployment would require vetted historical alert data and official real-time alert integration.
+
+These limitations are acceptable for the submission because they are documented in the README, assumptions, report, and CLI output rather than hidden.
+
+## Submission recommendation
+
+Use this repository as the submitted artifact. The strongest framing is:
+
+> I built a reproducible Python MVP that transforms air raid alert intervals into an hourly regional time-series panel, evaluates an explainable historical risk baseline with chronological validation, and exposes the result as a small planning assistant. I used AI agents not only to write code, but to challenge scope, avoid leakage, fix modeling flaws, verify tests/CLI/CI, and maintain a transparent AI log.
+
+The repository is satisfactory for the task because it shows both the final artifact and the AI-assisted engineering process behind it.

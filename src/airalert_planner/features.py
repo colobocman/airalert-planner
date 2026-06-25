@@ -11,10 +11,11 @@ DISPLAY_TZ = "Europe/Kyiv"
 
 
 def build_hourly_panel(events: pd.DataFrame) -> pd.DataFrame:
-    """Split alert intervals into hourly region buckets.
+    """Split alert intervals into hourly region buckets and explicit zero-alert hours.
 
-    The panel contains only hours touched by alerts in the MVP. A production
-    model can later densify the calendar to include explicit zero-alert hours.
+    The MVP densifies each regional observed time span, so the risk baseline
+    learns from both alert-active and non-alert hours instead of only positive
+    buckets.
     """
     rows: list[dict] = []
     for event in events.itertuples(index=False):
