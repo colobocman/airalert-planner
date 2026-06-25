@@ -1229,3 +1229,76 @@ Use this repository as the submitted artifact. The strongest framing is:
 > I built a reproducible Python MVP that transforms air raid alert intervals into an hourly regional time-series panel, evaluates an explainable historical risk baseline with chronological validation, and exposes the result as a small planning assistant. I used AI agents not only to write code, but to challenge scope, avoid leakage, fix modeling flaws, verify tests/CLI/CI, and maintain a transparent AI log.
 
 The repository is satisfactory for the task because it shows both the final artifact and the AI-assisted engineering process behind it.
+
+---
+
+# 20. Claude Code Session Export Added to AI Log
+
+**Date/time:** 2026-06-25T08:34:46+03:00  
+**Source:** ZIP file uploaded by Roman to Hermes / Telegram.
+
+## User message that triggered this addition
+
+```text
+ось транскрипт з claude /Users/romanprokopyshyn/Downloads/session-export-1782365512799.zip додай його теж в AI log
+```
+
+Roman then uploaded the file:
+
+```text
+session-export-1782365512799.zip
+```
+
+Hermes received it at:
+
+```text
+/home/roma/.hermes/cache/documents/doc_6eadaba0d99d_session-export-1782365512799.zip
+```
+
+## What was extracted
+
+The ZIP contained 12 files, including:
+
+```text
+3295a205-bebc-4f36-b840-1f2261d9565a.jsonl
+metadata.json
+logs/*.log
+```
+
+The readable Claude Code transcript and export metadata were converted into a repository Markdown file:
+
+```text
+docs/claude_code_session_export_1782365512799.md
+```
+
+The raw ZIP was not committed to the repository because it contains large low-level runtime/application logs. Instead, the AI log records the session metadata, manifest, and readable prompt/response transcript.
+
+## Extracted Claude session summary
+
+Claude export metadata:
+
+```text
+Title: Claude code conversation export
+Model: claude-opus-4-8
+CLI session ID: 3295a205-bebc-4f36-b840-1f2261d9565a
+Initial message: як зробити експорт всієї розмови (промпти та відповіді) з діалогу claude code
+```
+
+Readable transcript content:
+
+1. Roman asked Claude how to export the whole Claude Code conversation, including prompts and responses.
+2. Claude answered that the main options are:
+   - use `/export` inside Claude Code;
+   - read raw JSONL transcripts from `~/.claude/projects/<project>/<session-id>.jsonl`;
+   - use `claude --resume` / session listing to find the desired session.
+3. Claude offered to write a short script to convert `.jsonl` transcripts into readable Markdown.
+
+## Relevance to AirAlert Planner submission
+
+This Claude session did not directly modify AirAlert Planner source code, but it is relevant to the AI Summer School submission because it documents how the Claude-side conversation export was obtained and incorporated into the final AI process log.
+
+The full readable extracted transcript is now part of the repository at:
+
+```text
+docs/claude_code_session_export_1782365512799.md
+```
