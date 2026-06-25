@@ -77,7 +77,7 @@ Each number is the share of matching past hours that were under an alert (0 = ne
    ```bash
    make test
    ```
-   Success: ends with `N passed` and no failures (currently 58, ~10–15s, hardware-dependent; runs `pytest -q`).
+   Success: ends with `N passed` and no failures (currently 66, ~10–15s, hardware-dependent; runs `pytest -q`).
 
 6. **Run the analysis pipeline** (writes artifacts to `outputs/`).
    ```bash
@@ -150,7 +150,7 @@ data.py -> features.py -> risk.py -> planner.py -> cli.py / telegram_bot.py
 | `report.py` | Render `report.md`: per-region table, validation metrics, honest baseline verdicts, and the safety note. |
 | `plots.py` | Render three matplotlib PNG figures from the hourly panel. |
 | `cli.py` | Thin argparse CLI plus shared `build_model` helper. Subcommands: `analyze`, `risk`, `plan-trip`. |
-| `telegram_bot.py` | Optional thin adapter (`/risk`, `/help`); reuses `build_model` + `summarize_window`, no duplicated logic; requires `TELEGRAM_BOT_TOKEN` and the `[bot]` extra. |
+| `telegram_bot.py` | Optional thin adapter (`/start`, `/help`, `/risk`, `/trip`); reuses `build_model` + `summarize_window` + `summarize_trip`, no duplicated logic; requires `TELEGRAM_BOT_TOKEN` and the `[bot]` extra. |
 
 **`outputs/` artifacts** (created by `make run` / `analyze`)
 
@@ -213,7 +213,7 @@ The sample file has 1339 lines = 1 banner + 1 header + 1337 valid events (matchi
 - **Bands are heuristics, not calibrated thresholds.** The 0.10 / 0.30 cutoffs are fixed planning aids over the historical fraction.
 - **Densification spans observed windows only.** Each region's calendar is filled only between its first and last alert hour; uncovered periods contribute no zero-hours, so the global mean is not a true full-calendar base rate.
 - **DST edge cases.** Local labels follow Europe/Kyiv including DST, so the spring-forward night skips a local hour and the autumn night repeats one, affecting hour-bucket counts around transitions.
-- **Telegram bot is the least-developed surface.** It exposes only `/help` and `/risk` (no `/plan-trip`), has no automated tests, and is intentionally optional.
+- **Telegram bot is the least-developed surface.** It exposes `/start`, `/help`, `/risk`, and `/trip` (delegating to the same planner functions as the CLI, with tests for the parse/error paths), but it is intentionally optional and unmonitored — not a real-time channel.
 
 **Safety disclaimer (attached to every output, verbatim):**
 
@@ -229,12 +229,11 @@ The sample file has 1339 lines = 1 banner + 1 header + 1337 valid events (matchi
 | Integrate a vetted real historical source + live official-alert lookup | All current data is synthetic. A loader feeding the same `data.py -> features.py` pipeline moves this from demo to product; a live official-alert pointer keeps the not-real-time, not-predictive stance intact. Adds external dependency, schema mapping, provenance. | large, multi-day |
 | Add region-name normalization in the data layer | The loader only strips whitespace, so multi-source feeds split one region across variants (Kyiv/Kiev, oblast suffixes). A canonical alias map applied at load time hardens per-region cells. Localized to `data.py` + a mapping file + tests. | small-medium, ~1 day |
 | Implement geospatial route matching for `plan-trip` | Today a route is an effectively unordered list of region risks with no geography or timing. Real routing maps a path to regions crossed at expected times. Gated by `CLAUDE.md` until the MVP core is complete; pulls in a geo dependency. | large, multi-day |
-| Flesh out & document the optional Telegram bot | The adapter exposes only `/help` and `/risk`, with no tests. Adding `/plan-trip`, light input validation, and a small parsing/formatting test rounds out the lowest-priority surface without duplicating business logic. Must stay optional. | small, ~0.5–1 day |
 
 ## Development
 
 ```bash
-make test                                    # pytest -q  (currently 58 tests, ~10–15s)
+make test                                    # pytest -q  (currently 66 tests, ~10–15s)
 make run                                      # full pipeline -> outputs/
 ruff check src tests                          # lint (make lint)
 python scripts/generate_sample_data.py        # regenerate the synthetic data/sample_alerts.csv
